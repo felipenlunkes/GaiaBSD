@@ -1,3 +1,20 @@
+<div align="center">
+
+<h1>GaiaBSD - a FreeBSD fork for educational purposes</h1>
+
+![](https://img.shields.io/github/license/felipenlunkes/GaiaBSD.svg)
+![](https://img.shields.io/github/stars/felipenlunkes/GaiaBSD.svg)
+![](https://img.shields.io/github/issues/felipenlunkes/GaiaBSD.svg)
+![](https://img.shields.io/github/issues-closed/felipenlunkes/GaiaBSD.svg)
+![](https://img.shields.io/github/issues-pr/felipenlunkes/GaiaBSD.svg)
+![](https://img.shields.io/github/issues-pr-closed/felipenlunkes/GaiaBSD.svg)
+![](https://img.shields.io/github/downloads/felipenlunkes/GaiaBSD/total.svg)
+![](https://img.shields.io/github/release/felipenlunkes/GaiaBSD.svg)
+
+</div>
+
+<hr>
+
 FreeBSD Source:
 ---------------
 This is the top level of the FreeBSD source directory.
