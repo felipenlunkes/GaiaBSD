@@ -1,5 +1,5 @@
 ##
-# SPDX-License-Identifier: BSD-2-Clause-FreeBSD
+# SPDX-License-Identifier: BSD-2-Clause
 #
 # Copyright (c) 2022 Rubicon Communications, LLC ("Netgate")
 #
@@ -90,6 +90,8 @@ atf_test_case "4in4" "cleanup"
 
 	# Give the tunnel time to come up
 	sleep 10
+
+	atf_check -s exit:0 -o ignore jexec b ping -c 1 198.51.100.1
 
 	echo 'foo' | jexec b nc -u -w 2 192.0.2.1 1194
 	atf_check -s exit:0 -o ignore jexec b ping -c 3 198.51.100.1
@@ -480,7 +482,7 @@ timeout_client_cleanup()
 atf_test_case "explicit_exit" "cleanup"
 explicit_exit_head()
 {
-	atf_set descr 'Text explicit exit notification'
+	atf_set descr 'Test explicit exit notification'
 	atf_set require.user root
 	atf_set require.progs openvpn
 }
@@ -702,7 +704,6 @@ route_to_body()
 
 	vnet_mkjail a ${l}a
 	jexec a ifconfig ${l}a 192.0.2.1/24 up
-	jexec a ifconfig ${l}a inet alias 198.51.100.254/24
 	vnet_mkjail b ${l}b ${n}a
 	jexec b ifconfig ${l}b 192.0.2.2/24 up
 	jexec b ifconfig ${n}a up
@@ -751,25 +752,22 @@ route_to_body()
 
 	# Give the tunnel time to come up
 	sleep 10
+	jexec a ifconfig ovpn0 inet alias 198.51.100.254/24
 
 	# Check the tunnel
-	atf_check -s exit:0 -o ignore jexec b ping -c 1 198.51.100.1
-	atf_check -s exit:0 -o ignore jexec b ping -c 1 198.51.100.254
+	atf_check -s exit:0 -o ignore jexec b ping -c 1 -S 198.51.100.2 198.51.100.1
+	atf_check -s exit:0 -o ignore jexec b ping -c 1 -S 198.51.100.2 198.51.100.254
 
-	# Break our routes so that we need a route-to to make things work.
-	jexec b ifconfig ${n}a 198.51.100.3/24
-	atf_check -s exit:2 -o ignore jexec b ping -c 1 -t 1 -S 198.51.100.2 198.51.100.254
+	# Break our route to .254 so that we need a route-to to make things work.
+	jexec b ifconfig ${n}a 203.0.113.1/24 up
+	jexec b route add 198.51.100.254 -interface ${n}a
+
+	# Make sure it's broken.
+	atf_check -s exit:2 -o ignore jexec b ping -c 1 -S 198.51.100.2 198.51.100.254
 
 	jexec b pfctl -e
 	pft_set_rules b \
 		"pass out route-to (tun0 198.51.100.1) proto icmp from 198.51.100.2 "
-	atf_check -s exit:0 -o ignore jexec b ping -c 3 -S 198.51.100.2 198.51.100.254
-
-	# And this keeps working even if we don't have a route to 198.51.100.0/24 via if_ovpn
-	jexec b route del -net 198.51.100.0/24
-	jexec b route add -net 198.51.100.0/24 -interface ${n}a
-	pft_set_rules b \
-		"pass out route-to (tun0 198.51.100.3) proto icmp from 198.51.100.2 "
 	atf_check -s exit:0 -o ignore jexec b ping -c 3 -S 198.51.100.2 198.51.100.254
 }
 
@@ -915,17 +913,10 @@ ra_cleanup()
 	ovpn_cleanup
 }
 
-
-atf_test_case "chacha" "cleanup"
-chacha_head()
+ovpn_algo_body()
 {
-	atf_set descr 'Test DCO with the chacha algorithm'
-	atf_set require.user root
-	atf_set require.progs openvpn
-}
+	algo=$1
 
-chacha_body()
-{
 	ovpn_init
 
 	l=$(vnet_mkepair)
@@ -943,8 +934,8 @@ chacha_body()
 		dev-type tun
 		proto udp4
 
-		cipher CHACHA20-POLY1305
-		data-ciphers CHACHA20-POLY1305
+		cipher ${algo}
+		data-ciphers ${algo}
 		auth SHA256
 
 		local 192.0.2.1
@@ -967,6 +958,9 @@ chacha_body()
 
 		client
 
+		cipher ${algo}
+		data-ciphers ${algo}
+
 		remote 192.0.2.1
 		auth-user-pass $(atf_get_srcdir)/user.pass
 
@@ -984,7 +978,38 @@ chacha_body()
 	atf_check -s exit:0 -o ignore jexec b ping -c 3 198.51.100.1
 }
 
+atf_test_case "chacha" "cleanup"
+chacha_head()
+{
+	atf_set descr 'Test DCO with the chacha algorithm'
+	atf_set require.user root
+	atf_set require.progs openvpn
+}
+
+chacha_body()
+{
+	ovpn_algo_body CHACHA20-POLY1305
+}
+
 chacha_cleanup()
+{
+	ovpn_cleanup
+}
+
+atf_test_case "gcm_128" "cleanup"
+gcm_128_head()
+{
+	atf_set descr 'Test DCO with AES-128-GCM'
+	atf_set require.user root
+	atf_set require.progs openvpn
+}
+
+gcm_128_body()
+{
+	ovpn_algo_body AES-128-GCM
+}
+
+gcm_128_cleanup()
 {
 	ovpn_cleanup
 }
@@ -1002,4 +1027,5 @@ atf_init_test_cases()
 	atf_add_test_case "route_to"
 	atf_add_test_case "ra"
 	atf_add_test_case "chacha"
+	atf_add_test_case "gcm_128"
 }

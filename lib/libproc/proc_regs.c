@@ -1,5 +1,5 @@
 /*-
- * SPDX-License-Identifier: BSD-2-Clause-FreeBSD
+ * SPDX-License-Identifier: BSD-2-Clause
  *
  * Copyright (c) 2010 The FreeBSD Foundation
  * All rights reserved.
@@ -33,7 +33,6 @@
 __FBSDID("$FreeBSD$");
 
 #include <sys/types.h>
-#define	_WANT_MIPS_REGNUM
 #include <sys/ptrace.h>
 
 #include <err.h>

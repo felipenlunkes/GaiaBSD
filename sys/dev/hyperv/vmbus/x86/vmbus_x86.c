@@ -1,4 +1,4 @@
-/*- SPDX-License-Identifier: BSD-2-Clause-FreeBSD
+/*- SPDX-License-Identifier: BSD-2-Clause
  * Copyright (c) 2009-2012,2016-2017, 2022 Microsoft Corp.
  * Copyright (c) 2012 NetApp Inc.
  * Copyright (c) 2012 Citrix Inc.
@@ -67,6 +67,7 @@ __FBSDID("$FreeBSD$");
 #include <x86/include/apicvar.h>
 #include <dev/hyperv/vmbus/x86/hyperv_machdep.h>
 #include <dev/hyperv/vmbus/x86/hyperv_reg.h>
+#include <dev/hyperv/vmbus/hyperv_common_reg.h>
 #include "acpi_if.h"
 #include "pcib_if.h"
 #include "vmbus_if.h"

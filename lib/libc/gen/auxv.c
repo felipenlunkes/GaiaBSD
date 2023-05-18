@@ -1,5 +1,5 @@
 /*-
- * SPDX-License-Identifier: BSD-2-Clause-FreeBSD
+ * SPDX-License-Identifier: BSD-2-Clause
  *
  * Copyright 2010, 2012 Konstantin Belousov <kib@FreeBSD.ORG>.
  * All rights reserved.
@@ -39,7 +39,6 @@ __FBSDID("$FreeBSD$");
 #include "un-namespace.h"
 #include "libc_private.h"
 
-extern char **environ;
 extern int _DYNAMIC;
 #pragma weak _DYNAMIC
 

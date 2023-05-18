@@ -116,7 +116,7 @@ pass5(void)
 			}
 		}
 	}
-	basesize = &newcg->cg_space[0] - (u_char *)(&newcg->cg_firstfield);
+	basesize = sizeof(*newcg);
 	if (sblock.fs_magic == FS_UFS2_MAGIC) {
 		newcg->cg_iusedoff = basesize;
 	} else {
@@ -131,7 +131,7 @@ pass5(void)
 		    fs->fs_old_cpg * sizeof(int32_t);
 		newcg->cg_iusedoff = newcg->cg_old_boff +
 		    fs->fs_old_cpg * fs->fs_old_nrpos * sizeof(u_int16_t);
-		memset(&newcg->cg_space[0], 0, newcg->cg_iusedoff - basesize);
+		memset(&newcg[1], 0, newcg->cg_iusedoff - basesize);
 	}
 	inomapsize = howmany(fs->fs_ipg, CHAR_BIT);
 	newcg->cg_freeoff = newcg->cg_iusedoff + inomapsize;
@@ -375,6 +375,22 @@ pass5(void)
 	if (cursnapshot == 0 &&
 	    memcmp(&cstotal, &fs->fs_cstotal, sizeof cstotal) != 0
 	    && dofix(&idesc[0], "SUMMARY BLK COUNT(S) WRONG IN SUPERBLK")) {
+		if (debug) {
+			printf("cstotal is currently: %jd dirs, %jd blks free, "
+			    "%jd frags free, %jd inos free, %jd clusters\n",
+			    (intmax_t)fs->fs_cstotal.cs_ndir,
+			    (intmax_t)fs->fs_cstotal.cs_nbfree,
+			    (intmax_t)fs->fs_cstotal.cs_nffree,
+			    (intmax_t)fs->fs_cstotal.cs_nifree,
+			    (intmax_t)fs->fs_cstotal.cs_numclusters);
+			printf("cstotal ought to be:  %jd dirs, %jd blks free, "
+			    "%jd frags free, %jd inos free, %jd clusters\n",
+			    (intmax_t)cstotal.cs_ndir,
+			    (intmax_t)cstotal.cs_nbfree,
+			    (intmax_t)cstotal.cs_nffree,
+			    (intmax_t)cstotal.cs_nifree,
+			    (intmax_t)cstotal.cs_numclusters);
+		}
 		memmove(&fs->fs_cstotal, &cstotal, sizeof cstotal);
 		fs->fs_ronly = 0;
 		fs->fs_fmod = 0;

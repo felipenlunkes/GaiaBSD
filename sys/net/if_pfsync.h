@@ -1,5 +1,5 @@
 /*-
- * SPDX-License-Identifier: BSD-2-Clause-FreeBSD
+ * SPDX-License-Identifier: BSD-2-Clause
  *
  * Copyright (c) 2001 Michael Shalayeff
  * All rights reserved.
@@ -247,8 +247,23 @@ struct pfsyncreq {
 	int		 pfsyncr_defer;
 };
 
+struct pfsync_kstatus {
+	char		 	syncdev[IFNAMSIZ];
+	struct sockaddr_storage	syncpeer;
+	int		 	maxupdates;
+	int		 	flags;
+};
+
+struct pfsyncioc_nv {
+	void            *data;
+	size_t           len;   /* The length of the nvlist data. */
+	size_t           size;  /* The total size of the data buffer. */
+};
+
 #define	SIOCSETPFSYNC   _IOW('i', 247, struct ifreq)
 #define	SIOCGETPFSYNC   _IOWR('i', 248, struct ifreq)
+#define	SIOCSETPFSYNCNV _IOW('i', 249, struct ifreq)
+#define	SIOCGETPFSYNCNV _IOWR('i', 250, struct ifreq)
 
 #ifdef _KERNEL
 
@@ -259,7 +274,7 @@ struct pfsyncreq {
 #define	PFSYNC_S_IACK	0x01
 #define	PFSYNC_S_UPD	0x02
 #define	PFSYNC_S_UPD_C	0x03
-#define	PFSYNC_S_DEL	0x04
+#define	PFSYNC_S_DEL_C	0x04
 #define	PFSYNC_S_COUNT	0x05
 
 #define	PFSYNC_S_DEFER	0xfe

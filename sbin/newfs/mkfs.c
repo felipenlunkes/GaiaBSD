@@ -46,7 +46,7 @@ static char sccsid[] = "@(#)mkfs.c	8.11 (Berkeley) 5/3/95";
 #include <sys/cdefs.h>
 __FBSDID("$FreeBSD$");
 
-#define	IN_RTLD			/* So we pickup the P_OSREL defines */
+#define _WANT_P_OSREL
 #include <sys/param.h>
 #include <sys/disklabel.h>
 #include <sys/file.h>
@@ -332,6 +332,7 @@ restart:
 	 * can put into each cylinder group. If this is too big, we reduce
 	 * the density until it fits.
 	 */
+retry:
 	maxinum = (((int64_t)(1)) << 32) - INOPB(&sblock);
 	minfragsperinode = 1 + fssize / maxinum;
 	if (density == 0) {
@@ -666,6 +667,21 @@ restart:
 		pp->p_frag = sblock.fs_frag;
 		pp->p_cpg = sblock.fs_fpg;
 	}
+	/*
+	 * This should NOT happen. If it does complain loudly and
+	 * take evasive action.
+	 */
+	if ((int32_t)CGSIZE(&sblock) > sblock.fs_bsize) {
+		printf("INTERNAL ERROR: ipg %d, fpg %d, contigsumsize %d, ",
+		    sblock.fs_ipg, sblock.fs_fpg, sblock.fs_contigsumsize);
+		printf("old_cpg %d, size_cg %zu, CGSIZE %zu\n",
+		    sblock.fs_old_cpg, sizeof(struct cg), CGSIZE(&sblock));
+		printf("Please file a FreeBSD bug report and include this "
+		    "output\n");
+		maxblkspercg = fragstoblks(&sblock, sblock.fs_fpg) - 1;
+		density = 0;
+		goto retry;
+	}
 }
 
 /*
@@ -705,7 +721,7 @@ initcg(int cylno, time_t utime)
 	acg.cg_ndblk = dmax - cbase;
 	if (sblock.fs_contigsumsize > 0)
 		acg.cg_nclusterblks = acg.cg_ndblk / sblock.fs_frag;
-	start = &acg.cg_space[0] - (u_char *)(&acg.cg_firstfield);
+	start = sizeof(acg);
 	if (Oflag == 2) {
 		acg.cg_iusedoff = start;
 	} else {
@@ -733,7 +749,8 @@ initcg(int cylno, time_t utime)
 		    howmany(fragstoblks(&sblock, sblock.fs_fpg), CHAR_BIT);
 	}
 	if (acg.cg_nextfreeoff > (unsigned)sblock.fs_cgsize) {
-		printf("Panic: cylinder group too big\n");
+		printf("Panic: cylinder group too big by %d bytes\n",
+		    acg.cg_nextfreeoff - (unsigned)sblock.fs_cgsize);
 		exit(37);
 	}
 	acg.cg_cs.cs_nifree += sblock.fs_ipg;
@@ -915,8 +932,9 @@ fsinit(time_t utime)
 				    alloc(sblock.fs_fsize, node.dp1.di_mode);
 			node.dp1.di_blocks =
 			    btodb(fragroundup(&sblock, node.dp1.di_size));
-				wtfs(fsbtodb(&sblock, node.dp1.di_db[0]),
-				    sblock.fs_fsize, iobuf);
+			node.dp1.di_dirdepth = 1;
+			wtfs(fsbtodb(&sblock, node.dp1.di_db[0]),
+			    sblock.fs_fsize, iobuf);
 			iput(&node, UFS_ROOTINO + 1);
 		}
 	} else {
@@ -951,8 +969,9 @@ fsinit(time_t utime)
 				    alloc(sblock.fs_fsize, node.dp2.di_mode);
 			node.dp2.di_blocks =
 			    btodb(fragroundup(&sblock, node.dp2.di_size));
-				wtfs(fsbtodb(&sblock, node.dp2.di_db[0]), 
-				    sblock.fs_fsize, iobuf);
+			node.dp2.di_dirdepth = 1;
+			wtfs(fsbtodb(&sblock, node.dp2.di_db[0]), 
+			    sblock.fs_fsize, iobuf);
 			iput(&node, UFS_ROOTINO + 1);
 		}
 	}

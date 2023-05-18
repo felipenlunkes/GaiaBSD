@@ -125,7 +125,7 @@ kinst_trampoline_alloc_locked(int how)
 
 		/*
 		 * We didn't find any free trampoline in the current list,
-		 * allocate a new one.  If that happens the provider will no
+		 * allocate a new one.  If that fails the provider will no
 		 * longer be reliable, so try to warn the user.
 		 */
 		if ((chunk = kinst_trampchunk_alloc()) == NULL) {
@@ -162,6 +162,8 @@ kinst_trampoline_dealloc_locked(uint8_t *tramp, bool freechunks)
 {
 	struct trampchunk *chunk;
 	int off;
+
+	sx_assert(&kinst_tramp_sx, SX_XLOCKED);
 
 	if (tramp == NULL)
 		return;

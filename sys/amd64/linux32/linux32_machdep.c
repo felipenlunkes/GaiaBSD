@@ -33,30 +33,17 @@
 #include <sys/cdefs.h>
 __FBSDID("$FreeBSD$");
 
-#include "opt_compat.h"
-
 #include <sys/param.h>
-#include <sys/capsicum.h>
-#include <sys/clock.h>
 #include <sys/fcntl.h>
-#include <sys/file.h>
 #include <sys/imgact.h>
-#include <sys/kernel.h>
 #include <sys/limits.h>
 #include <sys/lock.h>
 #include <sys/malloc.h>
-#include <sys/mman.h>
 #include <sys/mutex.h>
 #include <sys/priv.h>
 #include <sys/proc.h>
 #include <sys/reg.h>
-#include <sys/resource.h>
-#include <sys/resourcevar.h>
 #include <sys/syscallsubr.h>
-#include <sys/sysproto.h>
-#include <sys/systm.h>
-#include <sys/unistd.h>
-#include <sys/wait.h>
 
 #include <machine/frame.h>
 #include <machine/md_var.h>
@@ -754,4 +741,22 @@ DEFINE_IFUNC(, int, futex_xorl, (int, uint32_t *, int *))
 
 	return ((cpu_stdext_feature & CPUID_STDEXT_SMAP) != 0 ?
 	    futex_xorl_smap : futex_xorl_nosmap);
+}
+
+int
+linux_ptrace_peekuser(struct thread *td, pid_t pid, void *addr, void *data)
+{
+
+	LINUX_RATELIMIT_MSG_OPT1("PTRACE_PEEKUSER offset %ld not implemented; "
+	    "returning EINVAL", (uintptr_t)addr);
+	return (EINVAL);
+}
+
+int
+linux_ptrace_pokeuser(struct thread *td, pid_t pid, void *addr, void *data)
+{
+
+	LINUX_RATELIMIT_MSG_OPT1("PTRACE_POKEUSER offset %ld "
+	    "not implemented; returning EINVAL", (uintptr_t)addr);
+	return (EINVAL);
 }

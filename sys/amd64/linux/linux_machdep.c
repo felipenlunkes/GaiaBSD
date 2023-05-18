@@ -33,15 +33,8 @@
 __FBSDID("$FreeBSD$");
 
 #include <sys/param.h>
-#include <sys/capsicum.h>
-#include <sys/clock.h>
-#include <sys/dirent.h>
-#include <sys/fcntl.h>
-#include <sys/file.h>
-#include <sys/filedesc.h>
-#include <sys/kernel.h>
+#include <sys/systm.h>
 #include <sys/ktr.h>
-#include <sys/limits.h>
 #include <sys/lock.h>
 #include <sys/malloc.h>
 #include <sys/mman.h>
@@ -49,15 +42,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/priv.h>
 #include <sys/proc.h>
 #include <sys/ptrace.h>
-#include <sys/resource.h>
-#include <sys/resourcevar.h>
-#include <sys/sched.h>
 #include <sys/syscallsubr.h>
-#include <sys/sysproto.h>
-#include <sys/systm.h>
-#include <sys/unistd.h>
-#include <sys/vnode.h>
-#include <sys/wait.h>
 
 #include <security/mac/mac_framework.h>
 
@@ -74,6 +59,7 @@ __FBSDID("$FreeBSD$");
 
 #include <vm/pmap.h>
 #include <vm/vm.h>
+#include <vm/vm_param.h>
 #include <vm/vm_extern.h>
 #include <vm/vm_kern.h>
 #include <vm/vm_map.h>
@@ -84,13 +70,9 @@ __FBSDID("$FreeBSD$");
 
 #include <amd64/linux/linux.h>
 #include <amd64/linux/linux_proto.h>
-#include <compat/linux/linux_emul.h>
-#include <compat/linux/linux_file.h>
 #include <compat/linux/linux_fork.h>
-#include <compat/linux/linux_ipc.h>
 #include <compat/linux/linux_misc.h>
 #include <compat/linux/linux_mmap.h>
-#include <compat/linux/linux_signal.h>
 #include <compat/linux/linux_util.h>
 
 #define	LINUX_ARCH_AMD64		0xc000003e
@@ -385,3 +367,109 @@ linux_ptrace_getregs_machdep(struct thread *td, pid_t pid,
 
 	return (0);
 }
+
+#define	LINUX_URO(a,m) ((uintptr_t)a == offsetof(struct linux_pt_regset, m))
+
+int
+linux_ptrace_peekuser(struct thread *td, pid_t pid, void *addr, void *data)
+{
+	struct linux_pt_regset reg;
+	struct reg b_reg;
+	uint64_t val;
+	int error;
+
+	if ((uintptr_t)addr & (sizeof(data) -1) || (uintptr_t)addr < 0)
+		return (EIO);
+	if ((uintptr_t)addr >= sizeof(struct linux_pt_regset)) {
+		LINUX_RATELIMIT_MSG_OPT1("PTRACE_PEEKUSER offset %ld "
+		    "not implemented; returning EINVAL", (uintptr_t)addr);
+		return (EINVAL);
+	}
+
+	if (LINUX_URO(addr, fs_base))
+		return (kern_ptrace(td, PT_GETFSBASE, pid, data, 0));
+	if (LINUX_URO(addr, gs_base))
+		return (kern_ptrace(td, PT_GETGSBASE, pid, data, 0));
+	if ((error = kern_ptrace(td, PT_GETREGS, pid, &b_reg, 0)) != 0)
+		return (error);
+	bsd_to_linux_regset(&b_reg, &reg);
+	val = *(&reg.r15 + ((uintptr_t)addr / sizeof(reg.r15)));
+	return (copyout(&val, data, sizeof(val)));
+}
+
+static inline bool
+linux_invalid_selector(u_short val)
+{
+
+	return (val != 0 && ISPL(val) != SEL_UPL);
+}
+
+struct linux_segreg_off {
+	uintptr_t	reg;
+	bool		is0;
+};
+
+const struct linux_segreg_off linux_segregs_off[] = {
+	{
+		.reg = offsetof(struct linux_pt_regset, gs),
+		.is0 = true,
+	},
+	{
+		.reg = offsetof(struct linux_pt_regset, fs),
+		.is0 = true,
+	},
+	{
+		.reg = offsetof(struct linux_pt_regset, ds),
+		.is0 = true,
+	},
+	{
+		.reg = offsetof(struct linux_pt_regset, es),
+		.is0 = true,
+	},
+	{
+		.reg = offsetof(struct linux_pt_regset, cs),
+		.is0 = false,
+	},
+	{
+		.reg = offsetof(struct linux_pt_regset, ss),
+		.is0 = false,
+	},
+};
+
+int
+linux_ptrace_pokeuser(struct thread *td, pid_t pid, void *addr, void *data)
+{
+	struct linux_pt_regset reg;
+	struct reg b_reg, b_reg1;
+	int error, i;
+
+	if ((uintptr_t)addr & (sizeof(data) -1) || (uintptr_t)addr < 0)
+		return (EIO);
+	if ((uintptr_t)addr >= sizeof(struct linux_pt_regset)) {
+		LINUX_RATELIMIT_MSG_OPT1("PTRACE_POKEUSER offset %ld "
+		    "not implemented; returning EINVAL", (uintptr_t)addr);
+		return (EINVAL);
+	}
+
+	if (LINUX_URO(addr, fs_base))
+		return (kern_ptrace(td, PT_SETFSBASE, pid, data, 0));
+	if (LINUX_URO(addr, gs_base))
+		return (kern_ptrace(td, PT_SETGSBASE, pid, data, 0));
+	for (i = 0; i < nitems(linux_segregs_off); i++) {
+		if ((uintptr_t)addr == linux_segregs_off[i].reg) {
+			if (linux_invalid_selector((uintptr_t)data))
+				return (EIO);
+			if (!linux_segregs_off[i].is0 && (uintptr_t)data == 0)
+				return (EIO);
+		}
+	}
+	if ((error = kern_ptrace(td, PT_GETREGS, pid, &b_reg, 0)) != 0)
+		return (error);
+	bsd_to_linux_regset(&b_reg, &reg);
+	*(&reg.r15 + ((uintptr_t)addr / sizeof(reg.r15))) = (uint64_t)data;
+	linux_to_bsd_regset(&b_reg1, &reg);
+	b_reg1.r_err = b_reg.r_err;
+	b_reg1.r_trapno = b_reg.r_trapno;
+	return (kern_ptrace(td, PT_SETREGS, pid, &b_reg, 0));
+}
+#undef LINUX_URO

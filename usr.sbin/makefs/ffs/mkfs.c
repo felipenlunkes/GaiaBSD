@@ -529,8 +529,9 @@ ffs_mkfs(const char *fsys, const fsinfo_t *fsopts, time_t tstamp)
 		initcg(cylno, tstamp, fsopts);
 		if (cylno % nprintcols == 0)
 			printf("\n");
-		printf(" %*lld,", printcolwidth,
-			(long long)fsbtodb(&sblock, cgsblock(&sblock, cylno)));
+		printf(" %*lld%s", printcolwidth,
+		    (long long)fsbtodb(&sblock, cgsblock(&sblock, cylno)),
+		    cylno == sblock.fs_ncg - 1 ? "" : ",");
 		fflush(stdout);
 	}
 	printf("\n");
@@ -633,7 +634,7 @@ initcg(uint32_t cylno, time_t utime, const fsinfo_t *fsopts)
 	acg.cg_ndblk = dmax - cbase;
 	if (sblock.fs_contigsumsize > 0)
 		acg.cg_nclusterblks = acg.cg_ndblk >> sblock.fs_fragshift;
-	start = &acg.cg_space[0] - (u_char *)(&acg.cg_firstfield);
+	start = sizeof(acg);
 	if (Oflag == 2) {
 		acg.cg_iusedoff = start;
 	} else {
