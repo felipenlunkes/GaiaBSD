@@ -48,6 +48,7 @@
 #include <net/ethernet.h>
 #include <net/if.h>
 #include <net/if_dl.h>
+#include <net/if_strings.h>
 #include <net/if_types.h>
 #include "ifconfig.h"
 #include "ifconfig_netlink.h"
@@ -87,9 +88,7 @@ print_bits(const char *btype, uint32_t *v, const int v_count,
 	int num = 0;
 
 	for (int i = 0; i < v_count * 32; i++) {
-		bool is_set = v[i / 32] & (1 << (i % 32));
-		if (i == 31)
-			v++;
+		bool is_set = v[i / 32] & (1U << (i % 32));
 		if (is_set) {
 			if (num++ == 0)
 				printf("<");
@@ -103,7 +102,7 @@ print_bits(const char *btype, uint32_t *v, const int v_count,
 	}
 	if (num > 0)
 		printf(">");
-}	
+}
 
 static void
 nl_init_socket(struct snl_state *ss)
@@ -122,9 +121,25 @@ nl_init_socket(struct snl_state *ss)
 	err(1, "unable to open netlink socket");
 }
 
+int
+ifconfig_nl(if_ctx *ctx, int iscreate,
+    const struct afswtch *uafp)
+{
+	struct snl_state ss = {};
+
+	nl_init_socket(&ss);
+	ctx->io_ss = &ss;
+
+	int error = ifconfig_ioctl(ctx, iscreate, uafp);
+
+	snl_free(&ss);
+	ctx->io_ss = NULL;
+
+	return (error);
+}
+
 struct ifa {
 	struct ifa		*next;
-	uint32_t		count;
 	uint32_t		idx;
 	struct snl_parsed_addr	addr;
 };
@@ -186,6 +201,42 @@ prepare_ifmap(struct snl_state *ss)
 	return (ifmap);
 }
 
+uint32_t
+if_nametoindex_nl(struct snl_state *ss, const char *ifname)
+{
+	struct snl_writer nw = {};
+	struct snl_parsed_link_simple link = {};
+
+	snl_init_writer(ss, &nw);
+	struct nlmsghdr *hdr = snl_create_msg_request(&nw, RTM_GETLINK);
+	snl_reserve_msg_object(&nw, struct ifinfomsg);
+	snl_add_msg_attr_string(&nw, IFLA_IFNAME, ifname);
+
+	if (!snl_finalize_msg(&nw) || !snl_send_message(ss, hdr))
+		return (0);
+
+	hdr = snl_read_reply(ss, hdr->nlmsg_seq);
+	if (hdr->nlmsg_type != NL_RTM_NEWLINK)
+		return (0);
+	if (!snl_parse_nlmsg(ss, hdr, &snl_rtm_link_parser_simple, &link))
+		return (0);
+
+	return (link.ifi_index);
+}
+
+ifType
+convert_iftype(ifType iftype)
+{
+	switch (iftype) {
+	case IFT_IEEE8023ADLAG:
+		return (IFT_ETHER);
+	case IFT_INFINIBANDLAG:
+		return (IFT_INFINIBAND);
+	default:
+		return (iftype);
+	}
+}
+
 static void
 prepare_ifaddrs(struct snl_state *ss, struct ifmap *ifmap)
 {
@@ -214,7 +265,7 @@ prepare_ifaddrs(struct snl_state *ss, struct ifmap *ifmap)
 			continue;
 		struct iface *iface = ifmap->ifaces[ifindex];
 		ifa->next = iface->ifa;
-		ifa->count = ++count;
+		ifa->idx = ++count;
 		iface->ifa = ifa;
 		iface->ifa_count++;
 	}
@@ -244,12 +295,18 @@ match_iface(struct ifconfig_args *args, struct iface *iface)
 		struct sockaddr_dl sdl = {
 			.sdl_len = sizeof(struct sockaddr_dl),
 			.sdl_family = AF_LINK,
-			.sdl_type = link->ifi_type,
+			.sdl_type = convert_iftype(link->ifi_type),
 			.sdl_alen = NLA_DATA_LEN(link->ifla_address),
 		};
 		return (match_ether(&sdl));
-	}
-	
+	} else if (args->afp->af_af == AF_LINK)
+		/*
+		 * The rtnetlink(4) RTM_GETADDR does not list link level
+		 * addresses, so latter cycle won't match anything.  Short
+		 * circuit on RTM_GETLINK has provided us an address.
+		 */
+		return (link->ifla_address != NULL);
+
 	for (struct ifa *ifa = iface->ifa; ifa != NULL; ifa = ifa->next) {
 		if (args->afp->af_af == ifa->addr.ifa_family)
 			return (true);
@@ -288,7 +345,7 @@ sort_iface_ifaddrs(struct snl_state *ss, struct iface *iface)
 	struct ifa **sorted_ifaddrs = snl_allocz(ss, iface->ifa_count * sizeof(void *));
 	struct ifa *ifa = iface->ifa;
 
-	for (int i = 0; i < iface->ifa_count; i++) {
+	for (uint32_t i = 0; i < iface->ifa_count; i++) {
 		struct ifa *ifa_next = ifa->next;
 
 		sorted_ifaddrs[i] = ifa;
@@ -298,95 +355,113 @@ sort_iface_ifaddrs(struct snl_state *ss, struct iface *iface)
 	qsort(sorted_ifaddrs, iface->ifa_count, sizeof(void *), cmp_ifaddr);
 	ifa = sorted_ifaddrs[0];
 	iface->ifa = ifa;
-	for (int i = 1; i < iface->ifa_count; i++) {
+	for (uint32_t i = 1; i < iface->ifa_count; i++) {
 		ifa->next = sorted_ifaddrs[i];
 		ifa = sorted_ifaddrs[i];
 	}
 }
 
 static void
-status_nl(struct ifconfig_args *args, struct io_handler *h, struct iface *iface)
+print_ifcaps(if_ctx *ctx, if_link_t *link)
+{
+	uint32_t sz_u32 = roundup2(link->iflaf_caps.nla_bitset_size, 32) / 32;
+
+	if (sz_u32 > 0) {
+		uint32_t *caps = link->iflaf_caps.nla_bitset_value;
+
+		printf("\toptions=%x", caps[0]);
+		print_bits("IFCAPS", caps, sz_u32, ifcap_bit_names, nitems(ifcap_bit_names));
+		putchar('\n');
+	}
+
+	if (ctx->args->supmedia && sz_u32 > 0) {
+		uint32_t *caps = link->iflaf_caps.nla_bitset_mask;
+
+		printf("\tcapabilities=%x", caps[0]);
+		print_bits("IFCAPS", caps, sz_u32, ifcap_bit_names, nitems(ifcap_bit_names));
+		putchar('\n');
+	}
+}
+
+static void
+status_nl(if_ctx *ctx, struct iface *iface)
 {
 	if_link_t *link = &iface->link;
+	struct ifconfig_args *args = ctx->args;
 
 	printf("%s: ", link->ifla_ifname);
 
 	printf("flags=%x", link->ifi_flags);
 	print_bits("IFF", &link->ifi_flags, 1, IFFBITS, nitems(IFFBITS));
 
-	print_metric(h->s);
+	print_metric(ctx);
 	printf(" mtu %d\n", link->ifla_mtu);
 
 	if (link->ifla_ifalias != NULL)
 		printf("\tdescription: %s\n", link->ifla_ifalias);
 
-	/* TODO: convert to netlink */
-	strlcpy(ifr.ifr_name, link->ifla_ifname, sizeof(ifr.ifr_name));
-	print_ifcap(args, h->s);
-	tunnel_status(h->s);
+	print_ifcaps(ctx, link);
+	tunnel_status(ctx);
 
 	if (args->allfamilies | (args->afp != NULL && args->afp->af_af == AF_LINK)) {
 		/* Start with link-level */
 		const struct afswtch *p = af_getbyfamily(AF_LINK);
 		if (p != NULL && link->ifla_address != NULL)
-			p->af_status_nl(args, h, link, NULL);
+			p->af_status(ctx, link, NULL);
 	}
 
-	sort_iface_ifaddrs(h->ss, iface);
+	sort_iface_ifaddrs(ctx->io_ss, iface);
 
 	for (struct ifa *ifa = iface->ifa; ifa != NULL; ifa = ifa->next) {
 		if (args->allfamilies) {
 			const struct afswtch *p = af_getbyfamily(ifa->addr.ifa_family);
 
 			if (p != NULL)
-				p->af_status_nl(args, h, link, &ifa->addr);
+				p->af_status(ctx, link, &ifa->addr);
 		} else if (args->afp->af_af == ifa->addr.ifa_family) {
 			const struct afswtch *p = args->afp;
 
-			p->af_status_nl(args, h, link, &ifa->addr);
+			p->af_status(ctx, link, &ifa->addr);
 		}
 	}
 
 	/* TODO: convert to netlink */
 	if (args->allfamilies)
-		af_other_status(h->s);
+		af_other_status(ctx);
 	else if (args->afp->af_other_status != NULL)
-		args->afp->af_other_status(h->s);
+		args->afp->af_other_status(ctx);
 
-	print_ifstatus(h->s);
+	print_ifstatus(ctx);
 	if (args->verbose > 0)
-		sfp_status(h->s, &ifr, args->verbose);
+		sfp_status(ctx);
 }
 
 static int
 get_local_socket(void)
 {
 	int s = socket(AF_LOCAL, SOCK_DGRAM, 0);
-	
+
 	if (s < 0)
 		err(1, "socket(family %u,SOCK_DGRAM)", AF_LOCAL);
 	return (s);
-}
-
-static void
-set_global_ifname(if_link_t *link)
-{
-	int iflen = strlcpy(name, link->ifla_ifname, sizeof(name));
-	if (iflen >= sizeof(name))
-		errx(1, "%s: cloning name too long", link->ifla_ifname);
-	strlcpy(ifr.ifr_name, link->ifla_ifname, sizeof(ifr.ifr_name));
 }
 
 void
 list_interfaces_nl(struct ifconfig_args *args)
 {
 	struct snl_state ss = {};
+	struct ifconfig_context _ctx = {
+		.args = args,
+		.io_s = get_local_socket(),
+		.io_ss = &ss,
+	};
+	struct ifconfig_context *ctx = &_ctx;
 
 	nl_init_socket(&ss);
 
 	struct ifmap *ifmap = prepare_ifmap(&ss);
 	struct iface **sorted_ifaces = snl_allocz(&ss, ifmap->count * sizeof(void *));
-	for (int i = 0, num = 0; i < ifmap->size; i++) {
+	for (uint32_t i = 0, num = 0; i < ifmap->size; i++) {
 		if (ifmap->ifaces[i] != NULL) {
 			sorted_ifaces[num++] = ifmap->ifaces[i];
 			if (num == ifmap->count)
@@ -396,32 +471,27 @@ list_interfaces_nl(struct ifconfig_args *args)
 	qsort(sorted_ifaces, ifmap->count, sizeof(void *), cmp_iface);
 	prepare_ifaddrs(&ss, ifmap);
 
-	struct io_handler h = {
-		.s = get_local_socket(),
-		.ss = &ss,
-	};
-
-	for (int i = 0, num = 0; i < ifmap->count; i++) {
+	for (uint32_t i = 0, num = 0; i < ifmap->count; i++) {
 		struct iface *iface = sorted_ifaces[i];
 
 		if (!match_iface(args, iface))
 			continue;
 
-		set_global_ifname(&iface->link);
+		ctx->ifname = iface->link.ifla_ifname;
 
 		if (args->namesonly) {
 			if (num++ != 0)
 				printf(" ");
 			fputs(iface->link.ifla_ifname, stdout);
 		} else if (args->argc == 0)
-			status_nl(args, &h, iface);
+			status_nl(ctx, iface);
 		else
-			ifconfig(args->argc, args->argv, 0, args->afp);
+			ifconfig_ioctl(ctx, 0, args->afp);
 	}
 	if (args->namesonly)
 		printf("\n");
 
-	close(h.s);
+	close(ctx->io_s);
 	snl_free(&ss);
 }
 

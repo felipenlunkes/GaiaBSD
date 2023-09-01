@@ -24,8 +24,6 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
- * $FreeBSD$
  */
 
 #ifndef	_FBSDRUN_H_
@@ -39,7 +37,7 @@ extern uint16_t cpu_cores, cpu_sockets, cpu_threads;
 
 struct vcpu;
 struct vmctx;
-struct vm_exit;
+struct vm_run;
 
 void *paddr_guest2host(struct vmctx *ctx, uintptr_t addr, size_t len);
 #ifdef BHYVE_SNAPSHOT
@@ -48,6 +46,6 @@ uintptr_t paddr_host2guest(struct vmctx *ctx, void *addr);
 
 int  fbsdrun_virtio_msix(void);
 
-int vmexit_task_switch(struct vmctx *, struct vcpu *, struct vm_exit *);
+int vmexit_task_switch(struct vmctx *, struct vcpu *, struct vm_run *);
 
 #endif

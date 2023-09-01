@@ -36,8 +36,6 @@
 #include "opt_platform.h"
 
 #include <sys/cdefs.h>
-__FBSDID("$FreeBSD$");
-
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/boot.h>
@@ -128,7 +126,7 @@ cpu_startup(void *dummy)
 {
 
 	sbi_print_version();
-	identify_cpu();
+	printcpuinfo(0);
 
 	printf("real memory  = %ju (%ju MB)\n", ptoa((uintmax_t)realmem),
 	    ptoa((uintmax_t)realmem) / (1024 * 1024));
@@ -535,6 +533,11 @@ initriscv(struct riscv_bootparams *rvbp)
 	}
 	physmem_hardware_regions(mem_regions, mem_regions_sz);
 #endif
+
+	/*
+	 * Identify CPU/ISA features.
+	 */
+	identify_cpu(0);
 
 	/* Do basic tuning, hz etc */
 	init_param1();

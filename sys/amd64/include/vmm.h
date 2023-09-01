@@ -24,8 +24,6 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
- * $FreeBSD$
  */
 
 #ifndef _VMM_H_
@@ -273,7 +271,7 @@ int vm_get_seg_desc(struct vcpu *vcpu, int reg,
 		    struct seg_desc *ret_desc);
 int vm_set_seg_desc(struct vcpu *vcpu, int reg,
 		    struct seg_desc *desc);
-int vm_run(struct vcpu *vcpu, struct vm_exit *vme_user);
+int vm_run(struct vcpu *vcpu);
 int vm_suspend(struct vm *vm, enum vm_suspend_how how);
 int vm_inject_nmi(struct vcpu *vcpu);
 int vm_nmi_pending(struct vcpu *vcpu);
@@ -297,6 +295,7 @@ int vm_suspend_cpu(struct vm *vm, struct vcpu *vcpu);
 int vm_resume_cpu(struct vm *vm, struct vcpu *vcpu);
 int vm_restart_instruction(struct vcpu *vcpu);
 struct vm_exit *vm_exitinfo(struct vcpu *vcpu);
+cpuset_t *vm_exitinfo_cpuset(struct vcpu *vcpu);
 void vm_exit_suspended(struct vcpu *vcpu, uint64_t rip);
 void vm_exit_debug(struct vcpu *vcpu, uint64_t rip);
 void vm_exit_rendezvous(struct vcpu *vcpu, uint64_t rip);
@@ -754,9 +753,13 @@ struct vm_exit {
 			enum vm_suspend_how how;
 		} suspended;
 		struct {
+			/*
+			 * The destination vCPU mask is saved in vcpu->cpuset
+			 * and is copied out to userspace separately to avoid
+			 * ABI concerns.
+			 */
 			uint32_t mode;
 			uint8_t vector;
-			cpuset_t dmask;
 		} ipi;
 		struct vm_task_switch task_switch;
 	} u;

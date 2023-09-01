@@ -1,5 +1,4 @@
 #
-# $FreeBSD$
 #
 # Generic mechanism to deal with WITH and WITHOUT options and turn
 # them into MK_ options.
@@ -7,6 +6,8 @@
 # For each option FOO in __DEFAULT_YES_OPTIONS, MK_FOO is set to
 # "yes", unless WITHOUT_FOO is defined, in which case it is set to
 # "no".
+#
+# For each option FOO in __REQUIRED_OPTIONS, MK_FOO is set to "yes".
 #
 # For each option FOO in __DEFAULT_NO_OPTIONS, MK_FOO is set to "no",
 # unless WITH_FOO is defined, in which case it is set to "yes".
@@ -51,6 +52,17 @@ MK_${var}:=	yes
 .endif # !defined(MK_${var})
 .endfor
 .undef __DEFAULT_YES_OPTIONS
+
+#
+# MK_* options which are always yes, typically as a transitional
+# step towards removing the options entirely.
+#
+.for var in ${__REQUIRED_OPTIONS}
+.if defined(WITHOUT_${var})
+.warning WITHOUT_${var} option ignored: it is no longer supported
+.endif
+MK_${var}:=	yes
+.endfor
 
 #
 # MK_* options which default to "no".

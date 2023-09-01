@@ -24,8 +24,6 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
- * $FreeBSD$
  */
 
 #ifndef _VMMAPI_H_
@@ -155,7 +153,7 @@ int	vm_set_register_set(struct vcpu *vcpu, unsigned int count,
     const int *regnums, uint64_t *regvals);
 int	vm_get_register_set(struct vcpu *vcpu, unsigned int count,
     const int *regnums, uint64_t *regvals);
-int	vm_run(struct vcpu *vcpu, struct vm_exit *ret_vmexit);
+int	vm_run(struct vcpu *vcpu, struct vm_run *vmrun);
 int	vm_suspend(struct vmctx *ctx, enum vm_suspend_how how);
 int	vm_reinit(struct vmctx *ctx);
 int	vm_apicid2vcpu(struct vmctx *ctx, int apicid);
