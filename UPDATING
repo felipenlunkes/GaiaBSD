@@ -27,6 +27,36 @@ NOTE TO PEOPLE WHO THINK THAT FreeBSD 15.x IS SLOW:
 	world, or to merely disable the most expensive debugging functionality
 	at runtime, run "ln -s 'abort:false,junk:false' /etc/malloc.conf".)
 
+20230927:
+	The EARLY_AP_STARTUP kernel option is mandatory on x86.  The option
+	has been added to DEFAULTS, so it should automatically be included in
+	custom kernel configurations without any additional change.
+
+20230922:
+	A new loader tunable net.pf.default_to_drop allows pf(4)’s default
+	behaviour to be changed from pass to drop. Previously this required
+	recompiling the kernel with the option PF_DEFAULT_TO_DROP.
+
+20230914:
+	Enable splitting out pkgbase manpages into separate packages by
+	default. To disable this, set WITHOUT_MANSPLITPKG=yes in src.conf.
+
+20230911:
+	Move standard include files to the clibs-dev package and move clang
+	internal libraries and headers to clang and clang-dev. Upgrading systems
+	installed using pkgbase past this change involves extra steps to allow
+	for these file moves:
+
+		pkg upgrade -y FreeBSD-utilities
+		pkg upgrade -y FreeBSD-utilities-dev
+		pkg upgrade -y
+
+20230909:
+	Enable vnet sysctl variables to be loader tunable. SYSCTLs which
+	belongs to VNETs can be initialized during early boot or module
+	loading if they are marked with CTLFLAG_TUN and there are
+	corresponding kernel environment variables.
+
 20230901:
 	The WITH_INIT_ALL_PATTERN and WITH_INIT_ALL_ZERO build options have
 	been replaced by INIT_ALL=pattern and INIT_ALL=zero respectively.
@@ -200,6 +230,12 @@ NOTE TO PEOPLE WHO THINK THAT FreeBSD 15.x IS SLOW:
 
 	after upgrading to restore all the component that were previously
 	installed.
+
+20221002:
+	OPIE has been removed from the base system.  If needed, it can
+	be installed from ports (security/opie) or packages (opie).
+	Otherwise, make sure that your PAM policies do not reference
+	pam_opie or pam_opieaccess.
 
 20220610:
 	LinuxKPI pm.h changes require an update to the latest drm-kmod version

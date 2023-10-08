@@ -368,7 +368,7 @@ BROKEN_OPTIONS+= OFED
 .endif
 
 # MK_host_egacy is set by local.sys.mk so is valid here
-.if ${MACHINE} == "host" && ${MK_host_egacy} == "yes"
+.if ${MACHINE:Nhost*} == "" && ${MK_host_egacy} == "yes"
 # we cannot expect tests to work
 BROKEN_OPTIONS+= TESTS
 .endif
@@ -402,10 +402,6 @@ MK_OPENSSL:=	no
 MK_OPENSSH:=	no
 MK_KERBEROS:=	no
 MK_KERBEROS_SUPPORT:=	no
-.endif
-
-.if ${MK_DIALOG} == "no"
-MK_BSDINSTALL:=	no
 .endif
 
 .if ${MK_DTRACE} == "no"

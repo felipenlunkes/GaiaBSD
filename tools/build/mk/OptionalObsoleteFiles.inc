@@ -2015,6 +2015,11 @@ OLD_DIRS+=usr/share/examples/uefisign
 OLD_DIRS+=usr/share/examples/ypldap
 .endif
 
+.if ${MK_FDT} == no
+OLD_FILES+=usr/sbin/ofwdump
+OLD_FILES+=usr/share/man/man8/ofwdump.8.gz
+.endif
+
 .if ${MK_FINGER} == no
 OLD_FILES+=usr/bin/finger
 OLD_FILES+=usr/share/man/man1/finger.1.gz
@@ -7252,6 +7257,7 @@ OLD_FILES+=usr/share/sendmail/cf/feature/bestmx_is_local.m4
 OLD_FILES+=usr/share/sendmail/cf/feature/bitdomain.m4
 OLD_FILES+=usr/share/sendmail/cf/feature/blacklist_recipients.m4
 OLD_FILES+=usr/share/sendmail/cf/feature/block_bad_helo.m4
+OLD_FILES+=usr/share/sendmail/cf/feature/check_other.m4
 OLD_FILES+=usr/share/sendmail/cf/feature/check_cert_altnames.m4
 OLD_FILES+=usr/share/sendmail/cf/feature/check_other.m4
 OLD_FILES+=usr/share/sendmail/cf/feature/compat_check.m4
